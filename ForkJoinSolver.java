@@ -23,9 +23,22 @@ public class ForkJoinSolver
     extends SequentialSolver
 {
 
+    /**
+     * An Atomic boolean to keep track of if the object in question is the initial one
+     * that is created on startup or not.
+     */
     AtomicBoolean first = new AtomicBoolean(false);
+    
+    /**
+     * A set to keep track of all visited nodes
+     */
     protected ConcurrentSkipListSet<Integer> visited;
+    
+    /**
+     * A list to keep track of the created forks
+     */
     protected ArrayList<ForkJoinSolver> forks;
+
     /**
      * Creates a solver that searches in <code>maze</code> from the
      * start node to a goal.
@@ -86,68 +99,137 @@ public class ForkJoinSolver
     }
 
     private List<Integer> parallelSearch()
-    {
+    {   
+        /**
+         * Each time a new instance of ForkJoinSolver is run, create a new player to 
+         * represent it and push it's start node to the frontier.
+         */
         int player = maze.newPlayer(start);
         frontier.push(start);
-        // Loop as long as all nodes have yet to be processed
+        
+        /**
+         * Loop as long as all nodes in the frontier have yet to be processed
+         * and the goal hasn't been found yet.
+         */
         while (!frontier.empty() && !GoalStatus.getGoalIsFound()){
 
             int current = frontier.pop();
             
+            /**
+             * If the current node has the goal, move the player to it.
+             * 
+             * Then add the goal-node to the visited set and change the goalstatus
+             * so that other forks get notified that it has been found.
+             * 
+             * Then return the path from the start to the goal-node.
+             */
             if (maze.hasGoal(current)){
-                maze.move(player, current); //the player moves to the goal
+                maze.move(player, current);
                 visited.add(current);
                 GoalStatus.setGoalIsFound();
                 return pathFromTo(start, current);
             }
-
-            //add the "spawn point"/the first node visited in total to visited
+            
+            /**
+             * Add the "spawn point"/the initial node visited to visited.
+             * 
+             * This only happens once.
+             */
             if(first.get() == true){
                 visited.add(current);
                 first.set(false);
             }
             
-            // Move player to the current node
+            /**
+             * Move the player to the current node, and get the number of neighbors to said node.
+             */
             maze.move(player, current);
-            
             int neighborAmount = maze.neighbors(current).size();
 
-            // Check if node has neighbors, aka, the node has 1 or more neighbors
+            /**
+             * Check whether or not the node has 1 or more neighbors.
+             * 
+             * If this happens to be false, then the node is a dead end.
+             */
             if(neighborAmount >= 1){
+
+                /**
+                 * Create a list to store unvisited nodes in.
+                 */
                 ArrayList<Integer> nonVisitedNodes = new ArrayList<Integer>();
-                // Loop through the current node's neighboring nodes and add them to a temporary list
+                
+                /**
+                 * Loop through the neighbors and if they haven't been visited yet, add them to
+                 * the visited set. 
+                 * 
+                 * After this, add the nodes to the unvisited nodes list and also add them
+                 * to the predecessor hashmap to store the way one got to said node.
+                 */
                 for(int nb : maze.neighbors(current)){
                     if(visited.add(nb)){
                         nonVisitedNodes.add(nb);
                         predecessor.put(nb, current);
                     }
                 }
-                //if there are 2 or more neighboring unvisited nodes, fork.
+                /**
+                 * If there are 2 or more neighboring unvisited nodes we want to fork.
+                 */
                 if(nonVisitedNodes.size() >= 2){
-                    for (Integer node : nonVisitedNodes) {
 
-                        //double-check that node is still available
+                    /**
+                     * Loop through the unvisited nodes list.
+                     */
+                    for (Integer node : nonVisitedNodes) {
+                        
+                        /**
+                         * Do a double check if the node is still available.
+                         */
                         if(visited.contains(node)){
-                            // Create new fork
+                            /**
+                             * Create a new fork that explores in the direction of the neighbor.
+                             */
                             ForkJoinSolver forkJS = new ForkJoinSolver(maze, node, visited);
                             forks.add(forkJS);
                             forkJS.fork();
                         }
                     }
+
+                    /**
+                     * Create a list to store the path
+                     */
                     List<Integer> workingPath = null;
+
+                    /**
+                     * Loop through the forks and join each of them.
+                     * 
+                     * If they haven't found a goal, they will return null, 
+                     * otherwise they return a list of Integers representing the path 
+                     * whitch gets added to the working path list.
+                     */
                     for(ForkJoinSolver processes : forks){
                         List<Integer> path = processes.join();
                         if(path != null){
                             workingPath = path;
                         }
                     }
+
+                    /**
+                     * If the working path is not null after joining the forks, return
+                     * the path from the working path gotten from the forks combined with
+                     * the path from start to the current node.
+                     */
                     if(workingPath != null) {
                         List<Integer> tempList = pathFromTo(start, current);
                         tempList.addAll(workingPath);
                         return tempList;
                     }
-                } else { //when we have one unvisited neighbor we don't create a new fork
-                        //instead we add that neighbor to the frontier
+                } 
+                /**
+                 * When we only have one unvisited neighbor we don't want to create a new fork.
+                 * Instead we just add the neighbor to the frontier as long as the neighboring
+                 * node hasn't been visited yet.
+                 */
+                else { 
                     if(nonVisitedNodes.size() != 0){
                         frontier.push(nonVisitedNodes.get(0));
                     }
@@ -155,12 +237,16 @@ public class ForkJoinSolver
             }
         }
 
-        // Only return null if every possible node has been visited without finding aa goal
+        /**
+         * Only return null if every possible node has been visited without finding a goal.
+         */
         return null;
     }
     
     /**
     * GoalStatus
+    * 
+    * Keeps track of whether or not the goal has been found or not.
     */
     public static class GoalStatus {
         static boolean goalIsFound = false;
