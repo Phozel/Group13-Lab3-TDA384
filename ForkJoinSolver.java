@@ -182,16 +182,12 @@ public class ForkJoinSolver
                     for (Integer node : nonVisitedNodes) {
                         
                         /**
-                         * Do a double check if the node is still available.
+                         * Create a new fork that explores in the direction of the neighbor.
                          */
-                        if(visited.contains(node)){
-                            /**
-                             * Create a new fork that explores in the direction of the neighbor.
-                             */
-                            ForkJoinSolver forkJS = new ForkJoinSolver(maze, node, visited);
-                            forks.add(forkJS);
-                            forkJS.fork();
-                        }
+                        ForkJoinSolver forkJS = new ForkJoinSolver(maze, node, visited);
+                        forks.add(forkJS);
+                        forkJS.fork();
+                        
                     }
 
                     /**
